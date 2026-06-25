@@ -12,25 +12,25 @@ ALMaSWPI.github.io/
 ├── es3011-content/            # JupyterLite _site/ output (your notebooks)
 │   ├── index.html
 │   ├── lab/index.html
-│   ├── config-utils.js
 │   └── …
 ├── templates/                 # Flask templates for injection
 │   ├── banner.html            # top bar injected into Jupyter pages
 │   ├── ai_sidebar.html        # "Ask Big Pickle" sidebar
-│   ├── tutor_bar.html         # AI tutor bar
-│   └── welcome.html           # landing page for /es3011/
+│   └── tutor_bar.html         # AI tutor bar
 ├── static/                    # Flask static assets (CSS/JS for injections)
 │   ├── css/
 │   │   ├── banner.css
 │   │   ├── ai_sidebar.css
 │   │   ├── tutor_bar.css
-│   │   ├── cell_tutor_links.css
-│   │   └── welcome.css
+│   │   └── cell_tutor_links.css
 │   ├── ai_sidebar.js
 │   ├── tutor_bar.js
 │   ├── cell_tutor_links.js
 │   ├── system_prompt.txt
 │   └── tutor_prompt.txt
+├── api-server/                # Standalone Flask API deployable to Vercel
+│   ├── app.py
+│   └── requirements.txt
 └── *.html, css/, js/, …       # ALMaSWPI site (unchanged)
 ```
 
@@ -43,7 +43,6 @@ JupyterLite and copy the output here:
 
 ```bash
 # In ~/JupyterBasedControlEngineeringTextbook/
-# rebuild JupyterLite (if you have jupyterlite installed):
 #   jupyter lite build --output-dir _site
 
 # Copy the fresh build into this repo:
@@ -58,7 +57,6 @@ cp -r ~/JupyterBasedControlEngineeringTextbook/_site \
 - **`templates/ai_sidebar.html`** – the "Ask Big Pickle" sidebar (button +
   panel + chat).
 - **`templates/tutor_bar.html`** – the "AI Tutor" bar.
-- **`templates/welcome.html`** – the ES3011 landing page at `/es3011/`.
 
   **Important:** All asset paths (`href`, `src`) in these templates must start
   with `/static/`. The `freeze.py` script automatically rewrites them to
@@ -71,32 +69,38 @@ cp -r ~/JupyterBasedControlEngineeringTextbook/_site \
 - **`static/tutor_prompt.txt`** – system prompt for the tutor bar API
   (`/api/tutor-chat`).
 
-  **Note:** The `/api/chat` and `/api/tutor-chat` endpoints are **only**
-  available when running `python freeze.py serve` (Flask dev server). They are
-  **not** included in the frozen static build. The sidebar/tutor UI will open
-  in the deployed site but the "Send" button will 404 unless you implement a
-  serverless alternative (e.g. a GitHub-backed API).
+### 3. Deploy the AI API to Vercel
 
-### 3. Add new Flask routes (advanced)
+The sidebar/tutor need a live API to respond. The standalone app in
+`api-server/app.py` is designed for Vercel:
 
-If you add new routes to `freeze.py`, you must also register a URL generator
-so Frozen-Flask knows to visit them. Example for a hypothetical `/glossary/`
-page:
+1. Go to **vercel.com → Add New → Project** and import this repo.
+2. In **Settings → General → Root Directory**, set `api-server/`.
+3. Add **Environment Variable**: `OPENCODE_API_KEY` = your API key.
+4. Deploy. Vercel gives you a URL like `https://al-ma-swpi-github-io.vercel.app`.
 
-```python
-@app.route("/glossary/")
-def glossary():
-    return render_template("glossary.html")
+### 4. Set API_BASE
 
-@freezer.register_generator
-def glossary():
-    yield {}   # no arguments → visits /glossary/
+The frozen site needs to know where the API lives. The JS in the
+sidebar/tutor reads `window.API_BASE` to decide which server to call.
+
+**Via GitHub Variables (recommended):**
+Go to **Settings → Variables and Secrets → Actions → Variables** → add:
+- **Name:** `API_BASE`
+- **Value:** `https://al-ma-swpi-github-io.vercel.app` (your Vercel URL)
+
+On the next push to `main`, the CI build will inject
+`<script>window.API_BASE="..."</script>` into the frozen HTML.
+
+**Via local build:**
+```bash
+API_BASE=https://al-ma-swpi-github-io.vercel.app python freeze.py
 ```
 
-For parameterised routes use `{"filename": "..."}` as the existing generators
-do.
+If `API_BASE` is not set, the JS defaults to `/api/chat` (only works when
+running `python freeze.py serve` locally).
 
-### 4. Preview locally
+### 5. Preview locally
 
 ```bash
 ~/JupyterBasedControlEngineeringTextbook/venv/bin/python freeze.py serve
@@ -104,9 +108,9 @@ do.
 
 Opens a Flask dev server on http://localhost:8000. The `/api/chat` and
 `/api/tutor-chat` endpoints require a `.env` file with an `OPENCODE_API_KEY`
-in the `~/JupyterBasedControlEngineeringTextbook/` directory to work.
+in the repo root or `~/JupyterBasedControlEngineeringTextbook/`.
 
-### 5. Build the static site
+### 6. Build the static site
 
 ```bash
 ~/JupyterBasedControlEngineeringTextbook/venv/bin/python freeze.py
@@ -119,14 +123,12 @@ Output goes to `_build/`. The freeze:
   `es3011/`.
 - Rewrites all `/static/…` paths to relative paths (`../../static/…`) so
   they work regardless of GitHub Pages subpath.
+- Injects `<script>window.API_BASE="…"</script>` if `API_BASE` was set.
 
-### 6. Deploy
+### 7. Deploy
 
-**Via CI (recommended):** Push to `main`. The workflow at
-`.github/workflows/deploy.yml` builds and deploys automatically.
-
-**Manually:** Commit `_build/` (or symlink to `docs/`) and point GitHub Pages
-at it. Not recommended – `_build/` is gitignored.
+Push to `main`. The workflow at `.github/workflows/deploy.yml` builds and
+deploys automatically.
 
 ## How the freeze works
 
@@ -140,3 +142,24 @@ at it. Not recommended – `_build/` is gitignored.
 
 Frozen-Flask visits every URL via the test client, writes the response to
 `_build/`, and the result is a fully static site ready for GitHub Pages.
+
+## AI Chat Architecture
+
+```
+Browser (GitHub Pages)
+    │
+    ├──── window.API_BASE ────┐
+    │                         │
+    ▼                         ▼
+/api/chat (local dev)    https://al-ma-swpi-github-io.vercel.app/api/chat
+(freeze.py serve)             │
+                         api-server/app.py (Vercel)
+                              │
+                              ▼
+                         opencode.ai (LLM API)
+```
+
+When `API_BASE` is set (via GitHub Variable or env), the frozen HTML includes
+`<script>window.API_BASE="https://…"</script>`. The JS uses that as the base
+URL for API calls. Without it, the JS falls back to `/api/chat` (only works
+when `freeze.py serve` is running locally).
