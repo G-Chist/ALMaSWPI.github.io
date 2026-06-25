@@ -6,6 +6,8 @@
   var input = document.getElementById("ai-sidebar-input");
   var send = document.getElementById("ai-sidebar-send");
 
+  var API_URL = (window.API_BASE || "") + "/api/chat";
+
   function toggle() {
     panel.classList.toggle("open");
     btn.classList.toggle("shifted");
@@ -55,12 +57,15 @@
     addMsg("user", q);
     addMsg("loading", "Thinking...");
     send.disabled = true;
-    fetch("/api/chat", {
+    fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question: q, context: getPageText(), history: history }),
     })
       .then(function (r) {
+        if (!r.ok) {
+          return r.text().then(function (t) { throw new Error("Server returned " + r.status + ": " + t.slice(0, 100)); });
+        }
         return r.json();
       })
       .then(function (data) {

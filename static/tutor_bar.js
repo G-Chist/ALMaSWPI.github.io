@@ -7,6 +7,8 @@
   var send = document.getElementById("tutor-bar-send");
   var promptLabel = document.getElementById("tutor-prompt-label");
 
+  var API_URL = (window.API_BASE || "") + "/api/tutor-chat";
+
   var cellNum = 1;
   var tutor_history = [];
   var loadingEl = null;
@@ -76,12 +78,17 @@
     loadingEl = addBlock("Out [" + cellNum + "]:", "Thinking...");
     send.disabled = true;
 
-    fetch("/api/tutor-chat", {
+    fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question: q, context: getPageText(), history: tutor_history }),
     })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r.ok) {
+          return r.text().then(function (t) { throw new Error("Server returned " + r.status + ": " + t.slice(0, 100)); });
+        }
+        return r.json();
+      })
       .then(function (data) {
         if (loadingEl) { loadingEl.remove(); loadingEl = null; }
         if (data.error) {

@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+env:
+  API_BASE: ${{ vars.API_BASE }}
 permissions:
   contents: read
   pages: write
@@ -20,7 +22,7 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: |
-          pip install flask frozen-flask
+          pip install flask frozen-flask requests
       - name: Build static site
         run: python freeze.py
       - name: Upload Pages artifact
