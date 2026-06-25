@@ -39,7 +39,7 @@ def load_env(path=".env"):
 
 env = load_env(os.path.join(HERE, ".env"))
 
-ZEN_API_KEY = env.get("OPENCODE_API_KEY", "")
+ZEN_API_KEY = (env.get("OPENCODE_API_KEY", "") or "").strip()
 ZEN_BASE_URL = env.get("OPENCODE_BASE_URL", "https://opencode.ai/zen/v1")
 ZEN_MODEL = env.get("OPENCODE_MODEL", "big-pickle")
 

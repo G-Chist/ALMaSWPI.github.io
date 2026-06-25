@@ -13,7 +13,7 @@ def add_cors(response):
     return response
 
 
-ZEN_API_KEY = os.environ.get("OPENCODE_API_KEY", "")
+ZEN_API_KEY = (os.environ.get("OPENCODE_API_KEY", "") or "").strip()
 ZEN_BASE_URL = os.environ.get("OPENCODE_BASE_URL", "https://opencode.ai/zen/v1")
 ZEN_MODEL = os.environ.get("OPENCODE_MODEL", "big-pickle")
 
