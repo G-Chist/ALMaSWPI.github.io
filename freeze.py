@@ -9,7 +9,7 @@ Usage:
 """
 
 import os, shutil
-from flask import Flask, send_from_directory, abort, Response
+from flask import Flask, send_from_directory, abort, Response, request
 from flask_frozen import Freezer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -32,10 +32,19 @@ with open(os.path.join(TEMPLATES_DIR, "ai_sidebar.html")) as f:
 with open(os.path.join(TEMPLATES_DIR, "tutor_bar.html")) as f:
     TUTOR_BAR_HTML = f.read()
 
-CELL_TUTOR_LINKS_CSS = '<link rel="stylesheet" href="/static/css/cell_tutor_links.css">'
-CELL_TUTOR_LINKS_JS = '<script src="/static/cell_tutor_links.js"></script>'
-
 SKIP_DIRS = {".git", "_build", "es3011-content", "templates", ".github"}
+
+
+def relativize(html):
+    """Rewrite /static/ paths to be relative to the current page depth.
+    This makes injections work regardless of deployment subpath."""
+    depth = request.path.strip("/").count("/")
+    if depth == 0:
+        return html
+    prefix = "../" * depth
+    html = html.replace('href="/static/', f'href="{prefix}static/')
+    html = html.replace('src="/static/', f'src="{prefix}static/')
+    return html
 
 
 def serve_with_banner(filepath):
@@ -43,19 +52,26 @@ def serve_with_banner(filepath):
         abort(404)
     with open(filepath) as f:
         content = f.read()
+
+    banner = relativize(BANNER_HTML)
+    ai = relativize(AI_SIDEBAR_HTML)
+    tutor = relativize(TUTOR_BAR_HTML)
+    css = relativize('<link rel="stylesheet" href="/static/css/cell_tutor_links.css">')
+    js = relativize('<script src="/static/cell_tutor_links.js"></script>')
+
     i = content.find("<body")
     if i >= 0:
         j = content.index(">", i) + 1
-        content = content[:j] + BANNER_HTML + content[j:]
+        content = content[:j] + banner + content[j:]
     if "</body>" in content:
         content = content.replace(
             "</body>",
-            CELL_TUTOR_LINKS_CSS + AI_SIDEBAR_HTML + TUTOR_BAR_HTML + CELL_TUTOR_LINKS_JS + "</body>",
+            css + ai + tutor + js + "</body>",
         )
     else:
         content = content.replace(
             "</html>",
-            AI_SIDEBAR_HTML + TUTOR_BAR_HTML + CELL_TUTOR_LINKS_JS + "\n</html>",
+            ai + tutor + js + "\n</html>",
         )
     return Response(content, mimetype="text/html")
 
@@ -108,14 +124,12 @@ def almas_files(filename):
 
 freezer = Freezer(app)
 
-
-SKIP_ALMAS_PREFIXES = tuple(f"{d}/" for d in SKIP_DIRS) + (".gitignore", "freeze.py", ".gitignore")
+SKIP_ALMAS_PREFIXES = tuple(f"{d}/" for d in SKIP_DIRS) + (".gitignore", "freeze.py")
 
 
 @freezer.register_generator
 def almas_files():
     for root, dirs, files in os.walk(ALMAS_DIR):
-        # Prune skipped directories in-place so os.walk doesn't descend
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for f in files:
             path = os.path.relpath(os.path.join(root, f), ALMAS_DIR)
