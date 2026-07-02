@@ -93,7 +93,8 @@
     console.log("[DEBUG] ai_sidebar ask() — context length:", getPageText().length);
     var reqBody = JSON.stringify({ question: q, context: getPageText(), notebook_title: getNotebookTitle() });
     console.log("[DEBUG] ai_sidebar ask() — FULL REQUEST BODY:", reqBody);
-    fetch("/api/chat", {
+    var apiBase = window.API_BASE || "";
+    fetch(apiBase + "/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: reqBody,

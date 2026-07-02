@@ -102,7 +102,8 @@
     console.log("[DEBUG] tutor_bar startTutoring() — context length:", getPageText().length);
     var reqBody = JSON.stringify({ question: "Begin the tutoring session.", context: getPageText(), history: [], notebook_title: getNotebookTitle() });
     console.log("[DEBUG] tutor_bar startTutoring() — FULL REQUEST BODY:", reqBody);
-    fetch("/api/tutor-chat", {
+    var apiBase = window.API_BASE || "";
+    fetch(apiBase + "/api/tutor-chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: reqBody,
@@ -152,7 +153,8 @@
     console.log("[DEBUG] tutor_bar ask() — context length:", getPageText().length, "history length:", tutor_history.length);
     var reqBody = JSON.stringify({ question: q, context: getPageText(), history: tutor_history, notebook_title: getNotebookTitle() });
     console.log("[DEBUG] tutor_bar ask() — FULL REQUEST BODY:", reqBody);
-    fetch("/api/tutor-chat", {
+    var apiBase = window.API_BASE || "";
+    fetch(apiBase + "/api/tutor-chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: reqBody,
