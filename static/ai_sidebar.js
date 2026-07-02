@@ -6,7 +6,25 @@
   var input = document.getElementById("ai-sidebar-input");
   var send = document.getElementById("ai-sidebar-send");
 
-  var API_URL = (window.API_BASE || "") + "/api/chat";
+  var focusedCell = null;
+  var focusedCellType = null;
+  var currentNotebook = getNotebookTitle();
+
+  function checkNotebookChanged() {
+    var t = getNotebookTitle();
+    if (t !== currentNotebook) {
+      currentNotebook = t;
+      msgs.innerHTML = "";
+      focusedCell = null;
+      focusedCellType = null;
+      panel.classList.remove("open");
+      btn.classList.remove("shifted");
+    }
+  }
+
+  var headObs = new MutationObserver(checkNotebookChanged);
+  headObs.observe(document.head, { childList: true, subtree: true, characterData: true });
+  window.addEventListener("hashchange", checkNotebookChanged);
 
   function toggle() {
     panel.classList.toggle("open");
@@ -36,59 +54,87 @@
     msgs.scrollTop = msgs.scrollHeight;
   }
 
-  var history = [];
+  function getNotebookTitle() {
+    return document.title || "Unknown Notebook";
+  }
 
   function getPageText() {
-    var body = document.body;
-    var clone = body.cloneNode(true);
-    var exclude = clone.querySelector("#ai-sidebar-wrap");
-    if (exclude) exclude.remove();
-    var els = clone.querySelectorAll(
-      "script,style,nav,header,footer,#spaghettios-banner"
-    );
-    for (var i = 0; i < els.length; i++) els[i].remove();
-    return (clone.textContent || "").trim().slice(0, 8000);
+    var allCells = document.querySelectorAll(".jp-Cell");
+    var cells = [];
+    for (var i = 0; i < allCells.length; i++) {
+      if (allCells[i].checkVisibility()) cells.push(allCells[i]);
+    }
+    if (cells.length === 0) {
+      return "Notebook content is still loading. Please wait for the notebook to fully render before asking.";
+    }
+    var parts = [];
+    for (var i = 0; i < cells.length; i++) {
+      if (focusedCellType === "code" && cells[i].classList.contains("jp-MarkdownCell")) continue;
+      if (focusedCellType === "markdown" && cells[i].classList.contains("jp-CodeCell")) continue;
+      var t = (cells[i].textContent || "").trim();
+      if (t) parts.push(t);
+    }
+    var text = parts.join("\n\n");
+    if (focusedCell) {
+      text = "--- Cell of interest ---\n" + focusedCell + "\n--- Rest of notebook ---\n\n" + text;
+    }
+    return text.slice(0, 8000);
   }
 
   function ask() {
+    checkNotebookChanged();
     var q = input.value.trim();
     if (!q) return;
     input.value = "";
     addMsg("user", q);
     addMsg("loading", "Thinking...");
     send.disabled = true;
-    fetch(API_URL, {
+    console.log("[DEBUG] ai_sidebar ask() — question:", q.slice(0, 120));
+    console.log("[DEBUG] ai_sidebar ask() — context length:", getPageText().length);
+    var reqBody = JSON.stringify({ question: q, context: getPageText(), notebook_title: getNotebookTitle() });
+    console.log("[DEBUG] ai_sidebar ask() — FULL REQUEST BODY:", reqBody);
+    fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: q, context: getPageText(), history: history }),
+      body: reqBody,
     })
       .then(function (r) {
-        if (!r.ok) {
-          return r.text().then(function (t) { throw new Error("Server returned " + r.status + ": " + t.slice(0, 100)); });
-        }
+        console.log("[DEBUG] ai_sidebar ask() — response status:", r.status);
         return r.json();
       })
       .then(function (data) {
         var loaders = msgs.querySelectorAll(".msg.loading");
         for (var i = 0; i < loaders.length; i++) loaders[i].remove();
         if (data.error) {
+          console.log("[DEBUG] ai_sidebar ask() — error:", data.error);
           addMsg("error", data.error);
         } else {
+          console.log("[DEBUG] ai_sidebar ask() — reply length:", data.reply.length, "preview:", data.reply.slice(0, 120));
           addMsg("assistant", data.reply);
-          history.push({ role: "user", content: q });
-          history.push({ role: "assistant", content: data.reply });
-          if (history.length > 5) history = history.slice(-5);
         }
       })
       .catch(function (err) {
+        console.log("[DEBUG] ai_sidebar ask() — fetch error:", err.message);
         var loaders = msgs.querySelectorAll(".msg.loading");
         for (var i = 0; i < loaders.length; i++) loaders[i].remove();
         addMsg("error", "Request failed: " + err.message);
       })
       .finally(function () {
         send.disabled = false;
+        focusedCell = null;
+        focusedCellType = null;
       });
   }
+
+  window.openAISidebar = function (cellContent, cellType) {
+    checkNotebookChanged();
+    focusedCell = cellContent;
+    focusedCellType = cellType || null;
+    msgs.innerHTML = "";
+    if (!panel.classList.contains("open")) toggle();
+    input.value = "Can you help me understand this block?";
+    input.focus();
+  };
 
   send.addEventListener("click", ask);
   input.addEventListener("keydown", function (e) {
